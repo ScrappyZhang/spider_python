@@ -4,45 +4,53 @@
 @Author  : scrappy_zhang
 @File    : spiderman.py
 '''
-from DataOputput import DataOutput
+
 from HtmlDownloader import HtmlDownloader
 from HtmlParser import HtmlParparser
-from URLManager import UrlManager
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
-                    datefmt='%a, %d %b %Y %H:%M:%S',
-                    filemode='w',
-                    filename='./test.log')
+from log import Logger
+from multiprocessing.managers import BaseManager
 
 
-class SpiderMan(object):
+class SpiderWork(object):
     def __init__(self):
-        self.manager = UrlManager()
+        BaseManager.register("get_task_queue")
+        BaseManager.register("get_result_queue")
+        server_addr = "127.0.0.1"
+        logging.info('Connect to server %s ...' % server_addr)
+        self.m = BaseManager(address=(server_addr, 8001), authkey="baike".encode())
+        self.m.connect()
+        self.task = self.m.get_task_queue()
+        self.result = self.m.get_result_queue()
         self.downloader = HtmlDownloader()
         self.parser = HtmlParparser()
-        self.output = DataOutput()
+        logging.info("init finish")
 
-    def crawl(self, root_url):
-        # 1. 添加入口URL
-        self.manager.add_new_url(root_url)
-        while (self.manager.has_new_url() and self.manager.old_url_size() < 100):
+    def crawl(self):
+        while (True):
             try:
-                new_url = self.manager.get_new_url()
-                html = self.downloader.download(new_url)
-                new_urls, data = self.parser.parser(new_url, html)
-                self.manager.add_new_urls(new_urls)
-                self.output.store_data(data)
-                logging.info("done %s page " % self.manager.old_url_size())
+                if not self.task.empty():
+                    url = self.task.get()
+
+                    if url == 'end':
+                        logging.info("控制节点通知爬虫节点停止工作")
+                        self.result.put(dict(new_urls="end", data="end"))
+                        return
+                    logging.info("爬虫节点正在解析：%s" % url.encode('utf-8'))
+                    content = self.downloader.download(url)
+                    new_urls, data = self.parser.parser(url, content)
+                    self.result.put(dict(new_urls=new_urls, data=data))
+            except EOFError as e:
+                logging.info("连接工作节点失败")
+                return
             except Exception as e:
                 logging.error(e)
-                print("crawl failed")
-
-        self.output.output_html()
+                logging.info("Craw failed")
 
 
 if __name__ == '__main__':
-    spider_man = SpiderMan()
-    spider_man.crawl("https://baike.baidu.com/item/%E7%BD%91%E7%BB%9C%E7%88%AC%E8%99%AB")
+    Logger('./logs/spiderwork.log', level='debug')
+    spider_man = SpiderWork()
+    spider_man.crawl()

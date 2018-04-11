@@ -35,11 +35,15 @@ class HtmlParparser:
         :return: 返回新的url集合
         """
         new_urls = set()
-        links = soup.find_all("a", href=re.compile(r'^/item/.*'))
-        for link in links:
-            new_url = link['href']
-            new_full_url = urllib.parse.urljoin(page_url, new_url)
-            new_urls.add(new_full_url)
+        try:
+            links = soup.find_all("a", href=re.compile(r'^/item/.*'))
+        except Exception as e:
+            logging.error(e)
+        else:
+            for link in links:
+                new_url = link['href']
+                new_full_url = urllib.parse.urljoin(page_url, new_url)
+                new_urls.add(new_full_url)
         return new_urls
 
     def _get_new_data(self, page_url, soup):
@@ -51,11 +55,18 @@ class HtmlParparser:
         """
         data = {}
         data['url'] = page_url
-        title = soup.find('dd', class_="lemmaWgt-lemmaTitle-title").find('h1')
-        data['title'] = title.get_text()
-
-        summary = soup.find('div', attrs={'class': "para", 'label-module': "para"})
-        data['summary'] = summary.get_text()
+        try:
+            title = soup.find('dd', class_="lemmaWgt-lemmaTitle-title").find('h1')
+        except Exception as e:
+            logging.error(e)
+        else:
+            data['title'] = title.get_text()
+        try:
+            summary = soup.find('div', attrs={'class': "para", 'label-module': "para"})
+        except Exception as e:
+            logging.error(e)
+        else:
+            data['summary'] = summary.get_text()
         return data
 
 
